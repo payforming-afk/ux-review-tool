@@ -8,17 +8,12 @@ declare global {
   var __reviewDb: Database.Database | undefined;
 }
 
-const dbDir = path.join(process.cwd(), "data");
-const dbPath = path.join(dbDir, "review.db");
-
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
-
+const useLocalFilePersistence = shouldUseLocalFilePersistence();
+const dbPath = resolveDatabasePath(useLocalFilePersistence);
 const db = global.__reviewDb ?? new Database(dbPath);
 
 if (!global.__reviewDb) {
-  db.pragma("journal_mode = WAL");
+  db.pragma(`journal_mode = ${useLocalFilePersistence ? "WAL" : "MEMORY"}`);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS tasks (
@@ -77,4 +72,30 @@ function ensureColumnExists(table: string, column: string, definition: string): 
   }
 
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+function shouldUseLocalFilePersistence(): boolean {
+  if (process.env.NODE_ENV === "development") {
+    return true;
+  }
+
+  if (process.env.VERCEL === "1") {
+    return false;
+  }
+
+  return process.env.NODE_ENV !== "production";
+}
+
+function resolveDatabasePath(useLocalPersistence: boolean): string {
+  if (!useLocalPersistence) {
+    return ":memory:";
+  }
+
+  const dbDir = path.join(process.cwd(), "data");
+
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+
+  return path.join(dbDir, "review.db");
 }
