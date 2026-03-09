@@ -30,7 +30,7 @@ export default function RootLayout({
               <Link href="/tasks" className="button-link">
                 任务列表
               </Link>
-              <Link href="/create" className="button-link button-link-primary">
+              <Link href="/tasks/create" className="button-link button-link-primary">
                 新建任务
               </Link>
             </nav>

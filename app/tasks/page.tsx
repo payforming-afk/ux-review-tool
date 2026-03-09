@@ -15,7 +15,7 @@ export default function TaskListPage() {
           <p className="section-subtitle">查看任务进度，快速进入具体比对结果并标注问题。</p>
         </div>
 
-        <Link href="/create" className="button-link button-link-primary">
+        <Link href="/tasks/create" className="button-link button-link-primary">
           新建任务
         </Link>
       </div>
@@ -24,7 +24,7 @@ export default function TaskListPage() {
         <div className="empty-state">
           <h3>暂无任务</h3>
           <p>创建第一个视觉走查任务，开始上传图片并生成差异结果。</p>
-          <Link href="/create" className="button-link button-link-primary">
+          <Link href="/tasks/create" className="button-link button-link-primary">
             去创建
           </Link>
         </div>

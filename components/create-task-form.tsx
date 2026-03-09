@@ -190,7 +190,7 @@ export function CreateTaskForm() {
 
       <div className="actions">
         <button type="submit" className="button-link button-link-primary" disabled={isSubmitting}>
-          {isSubmitting ? "创建中..." : "创建任务并生成比对"}
+          {isSubmitting ? "创建中..." : "开始走查"}
         </button>
       </div>
     </form>
