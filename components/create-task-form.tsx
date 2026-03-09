@@ -10,12 +10,6 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
-interface CreateTaskResponse {
-  task: {
-    task_id: number;
-  };
-}
-
 type UploadSide = "design" | "implementation";
 
 export function CreateTaskForm() {
@@ -82,11 +76,11 @@ export function CreateTaskForm() {
         throw new Error(payload.error ?? "创建任务失败。");
       }
 
-      const payload = (await response.json()) as CreateTaskResponse;
+      await response.json().catch(() => ({}));
       form.reset();
       setDesignFiles([]);
       setImplementationFiles([]);
-      router.push(`/tasks/${payload.task.task_id}`);
+      router.push("/tasks");
       router.refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "创建任务失败，请稍后重试。");
