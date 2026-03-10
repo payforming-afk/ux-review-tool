@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ReviewBoard } from "@/components/review-board";
+import { TaskReviewSessionFallback } from "@/components/task-review-session-fallback";
 import { getTaskReviewData } from "@/lib/repository";
 import { loadComparisonRegions } from "@/lib/repository";
 import type { ComparisonReview, ImageRecord } from "@/lib/types";
@@ -26,12 +27,7 @@ export default async function TaskReviewPage({ params }: TaskReviewPageProps) {
   const data = getTaskReviewData(taskId);
 
   if (!data) {
-    return (
-      <UnavailableState
-        title="任务结果暂不可用"
-        description="当前运行环境没有找到该任务数据，请返回任务列表后重试，或重新创建任务。"
-      />
-    );
+    return <TaskReviewSessionFallback taskId={taskId} />;
   }
 
   const comparisonIndexes = Array.from(new Set(data.images.map((image) => image.comparison_index))).sort(

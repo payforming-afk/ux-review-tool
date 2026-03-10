@@ -9,6 +9,7 @@ import {
   useState
 } from "react";
 import { useRouter } from "next/navigation";
+import { reviewSessionKey, type ReviewSessionPayload } from "@/lib/review-session";
 
 type UploadSide = "design" | "implementation";
 
@@ -76,13 +77,16 @@ export function CreateTaskForm() {
         throw new Error(payload.error ?? "创建任务失败。");
       }
 
-      const payload = (await response.json().catch(() => ({}))) as {
-        task?: { task_id?: number };
-      };
+      const payload = (await response.json().catch(() => ({}))) as ReviewSessionPayload;
       form.reset();
       setDesignFiles([]);
       setImplementationFiles([]);
       const createdTaskId = payload.task?.task_id;
+
+      if (typeof createdTaskId === "number" && createdTaskId > 0) {
+        sessionStorage.setItem(reviewSessionKey(createdTaskId), JSON.stringify(payload));
+      }
+
       router.push(
         typeof createdTaskId === "number" && createdTaskId > 0 ? `/tasks/${createdTaskId}` : "/tasks"
       );
