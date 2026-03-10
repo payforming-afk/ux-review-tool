@@ -52,11 +52,11 @@ const insertTaskStmt = db.prepare(
 );
 
 const insertImageStmt = db.prepare(
-  `INSERT INTO images (task_id, comparison_index, type, url) VALUES (?, ?, ?, ?)`
+  `INSERT INTO images (task_id, comparison_index, type, width, height, url) VALUES (?, ?, ?, ?, ?, ?)`
 );
 
 const getImagesStmt = db.prepare(
-  `SELECT image_id, task_id, comparison_index, type, url
+  `SELECT image_id, task_id, comparison_index, type, width, height, url
    FROM images
    WHERE task_id = ?
    ORDER BY comparison_index ASC, image_id ASC`
@@ -80,6 +80,19 @@ const getIssueStmt = db.prepare(
    WHERE issue_id = ?`
 );
 
+const upsertComparisonRegionsStmt = db.prepare(`
+  INSERT INTO comparison_regions (task_id, comparison_index, regions_json)
+  VALUES (?, ?, ?)
+  ON CONFLICT(task_id, comparison_index) DO UPDATE SET regions_json = excluded.regions_json
+`);
+
+const listComparisonRegionsStmt = db.prepare(
+  `SELECT comparison_index, regions_json
+   FROM comparison_regions
+   WHERE task_id = ?
+   ORDER BY comparison_index ASC`
+);
+
 export function listTasks(): TaskWithStats[] {
   return listTasksStmt.all() as TaskWithStats[];
 }
@@ -101,12 +114,16 @@ export function createImage(input: {
   task_id: number;
   comparison_index?: number;
   type: ImageType;
+  width?: number;
+  height?: number;
   url: string;
 }): number {
   const result = insertImageStmt.run(
     input.task_id,
     input.comparison_index ?? 0,
     input.type,
+    input.width ?? 0,
+    input.height ?? 0,
     input.url
   );
   return Number(result.lastInsertRowid);
@@ -164,6 +181,45 @@ export function getTaskReviewData(taskId: number): {
   };
 }
 
+export function saveComparisonRegions(
+  taskId: number,
+  comparisonIndex: number,
+  regions: DiffRegion[]
+): void {
+  upsertComparisonRegionsStmt.run(taskId, comparisonIndex, JSON.stringify(regions));
+}
+
+export function loadComparisonRegions(
+  taskId: number,
+  comparisonIndexes: number[]
+): Record<number, DiffRegion[]> {
+  const rows = listComparisonRegionsStmt.all(taskId) as Array<{
+    comparison_index: number;
+    regions_json: string;
+  }>;
+  const requested = new Set(comparisonIndexes);
+  const result: Record<number, DiffRegion[]> = {};
+
+  comparisonIndexes.forEach((comparisonIndex) => {
+    result[comparisonIndex] = [];
+  });
+
+  rows.forEach((row) => {
+    if (!requested.has(row.comparison_index)) {
+      return;
+    }
+
+    try {
+      const regions = JSON.parse(row.regions_json) as DiffRegion[];
+      result[row.comparison_index] = Array.isArray(regions) ? regions : [];
+    } catch {
+      result[row.comparison_index] = [];
+    }
+  });
+
+  return result;
+}
+
 export function buildCsvReport(
   task: Task,
   comparisonRegions: ComparisonRegions[],
@@ -210,42 +266,41 @@ export function buildMarkdownReport(
   exportedAt?: string
 ): string {
   const reviewDate = formatReportDate(exportedAt, task.created_at);
+  const totalRegions = comparisons.reduce((sum, comparison) => sum + comparison.regions.length, 0);
   const lines: string[] = [];
 
   lines.push("# 设计走查报告");
   lines.push("");
   lines.push("## 一、任务信息");
   lines.push("");
-  lines.push("| 项目 | 内容 |");
-  lines.push("|---|---|");
-  lines.push(`| 任务名称 | ${escapeMarkdownTableCell(task.task_name)} |`);
-  lines.push(`| 版本 | ${escapeMarkdownTableCell(task.version)} |`);
-  lines.push(`| 负责人 | ${escapeMarkdownTableCell(task.owner)} |`);
-  lines.push(`| 走查时间 | ${reviewDate} |`);
+  lines.push(`- 任务名称：${task.task_name}`);
+  lines.push(`- 版本：${task.version}`);
+  lines.push(`- 负责人：${task.owner}`);
+  lines.push(`- 创建时间：${reviewDate}`);
   lines.push("");
-  lines.push("---");
-  lines.push("");
-  lines.push("## 二、页面对比");
+  lines.push("## 二、对比结果");
   lines.push("");
 
   if (comparisons.length === 0) {
-    lines.push("暂无页面对比数据。");
+    lines.push("- 当前任务未生成 comparison 数据。");
     lines.push("");
   } else {
+    lines.push(`- 当前任务共 ${comparisons.length} 组 comparison。`);
+    lines.push("");
+
     for (const comparison of comparisons) {
+      const hasDiffImage = comparison.images.some((image) => image.type === "diff");
       lines.push(`### 对比组 ${comparison.comparison_index + 1}`);
       lines.push("");
-      lines.push("| 设计稿 | 前端实现 | 差异图 |");
-      lines.push("|---|---|---|");
-      lines.push(
-        `| ${escapeMarkdownTableCell(getImageDisplayName(comparison.images, "design"))} | ${escapeMarkdownTableCell(getImageDisplayName(comparison.images, "implementation"))} | ${escapeMarkdownTableCell(getImageDisplayName(comparison.images, "diff"))} |`
-      );
+      lines.push(`- comparison：${hasDiffImage ? "已生成" : "未生成"}`);
+      lines.push(`- 差异区域数量：${comparison.regions.length}`);
+      lines.push(`- 设计稿：${getImageDisplayName(comparison.images, "design")}`);
+      lines.push(`- 实现图：${getImageDisplayName(comparison.images, "implementation")}`);
+      lines.push(`- 差异图：${getImageDisplayName(comparison.images, "diff")}`);
       lines.push("");
     }
   }
 
-  lines.push("---");
-  lines.push("");
   lines.push("## 三、问题列表");
   lines.push("");
 
@@ -253,61 +308,28 @@ export function buildMarkdownReport(
     lines.push("本次未记录人工确认的问题。");
     lines.push("");
   } else {
-    lines.push(`本次共发现 ${issues.length} 个设计问题。`);
-    lines.push("");
-    lines.push("| 序号 | 类型 | 严重程度 | 问题描述 |");
-    lines.push("|---|---|---|---|");
+    lines.push("| 序号 | 类型 | 严重程度 | 问题描述 | 坐标 |");
+    lines.push("|---|---|---|---|---|");
 
     issues.forEach((issue, index) => {
       lines.push(
-        `| ${index + 1} | ${escapeMarkdownTableCell(mapIssueTypeZh(issue.type))} | ${escapeMarkdownTableCell(mapSeverityZh(issue.severity))} | ${escapeMarkdownTableCell(issue.description)} |`
+        `| ${index + 1} | ${escapeMarkdownTableCell(mapIssueTypeZh(issue.type))} | ${escapeMarkdownTableCell(mapSeverityZh(issue.severity))} | ${escapeMarkdownTableCell(issue.description)} | ${escapeMarkdownTableCell(`(${issue.x}, ${issue.y}, ${issue.width}, ${issue.height})`)} |`
       );
     });
     lines.push("");
   }
 
-  lines.push("---");
+  lines.push("## 四、结论");
   lines.push("");
-  lines.push("## 四、问题详情");
+  lines.push(`- comparison 总数：${comparisons.length}`);
+  lines.push(`- 差异区域总数：${totalRegions}`);
+  lines.push(`- 问题总数：${issues.length}`);
+  lines.push(
+    issues.length > 0
+      ? "- 结论：存在已确认视觉问题，请按问题列表逐项修复。"
+      : "- 结论：当前未记录人工确认问题。"
+  );
   lines.push("");
-
-  if (issues.length === 0) {
-    lines.push("本次未记录人工确认的问题。");
-    lines.push("");
-  } else {
-    issues.forEach((issue, index) => {
-      const typeZh = mapIssueTypeZh(issue.type);
-      const typeEn = mapIssueTypeEn(issue.type);
-
-      lines.push(`### 问题 ${index + 1}：${typeZh}问题`);
-      lines.push("");
-      lines.push("**类型**");
-      lines.push("");
-      lines.push(`${typeZh}（${typeEn}）`);
-      lines.push("");
-      lines.push("**严重程度**");
-      lines.push("");
-      lines.push(mapSeverityZh(issue.severity));
-      lines.push("");
-      lines.push("**问题描述**");
-      lines.push("");
-      lines.push(issue.description.trim() || "（无描述）");
-      lines.push("");
-      lines.push("**所属对比组**");
-      lines.push("");
-      lines.push(`对比组 ${issue.comparison_index + 1}`);
-      lines.push("");
-      lines.push("**问题位置**");
-      lines.push("");
-      lines.push("```text");
-      lines.push(`x:${issue.x}`);
-      lines.push(`y:${issue.y}`);
-      lines.push(`width:${issue.width}`);
-      lines.push(`height:${issue.height}`);
-      lines.push("```");
-      lines.push("");
-    });
-  }
 
   return `${lines.join("\n").trimEnd()}\n`;
 }
@@ -324,6 +346,10 @@ function getImageDisplayName(images: ImageRecord[], imageType: ImageType): strin
   const target = images.find((image) => image.type === imageType);
   if (!target) {
     return "无";
+  }
+
+  if (target.url.startsWith("data:")) {
+    return "内嵌图片数据";
   }
 
   const fileName = target.url.split("/").filter(Boolean).at(-1);

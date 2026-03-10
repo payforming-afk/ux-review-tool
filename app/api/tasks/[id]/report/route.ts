@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import {
   buildCsvReport,
   buildMarkdownReport,
-  getTaskReviewData
+  getTaskReviewData,
+  loadComparisonRegions
 } from "@/lib/repository";
-import { loadComparisonRegions } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +30,7 @@ export async function GET(
     new Set(reviewData.images.map((image) => image.comparison_index))
   ).sort((a, b) => a - b);
 
-  const regionsByComparison = await loadComparisonRegions(taskId, comparisonIndexes);
+  const regionsByComparison = loadComparisonRegions(taskId, comparisonIndexes);
 
   const comparisons = comparisonIndexes.map((comparisonIndex) => ({
     comparison_index: comparisonIndex,

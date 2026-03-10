@@ -29,6 +29,8 @@ if (!global.__reviewDb) {
       task_id INTEGER NOT NULL,
       comparison_index INTEGER NOT NULL DEFAULT 0,
       type TEXT NOT NULL CHECK(type IN ('design', 'implementation', 'diff')),
+      width INTEGER NOT NULL DEFAULT 0,
+      height INTEGER NOT NULL DEFAULT 0,
       url TEXT NOT NULL,
       FOREIGN KEY(task_id) REFERENCES tasks(task_id)
     );
@@ -48,11 +50,22 @@ if (!global.__reviewDb) {
       FOREIGN KEY(task_id) REFERENCES tasks(task_id)
     );
 
+    CREATE TABLE IF NOT EXISTS comparison_regions (
+      task_id INTEGER NOT NULL,
+      comparison_index INTEGER NOT NULL,
+      regions_json TEXT NOT NULL,
+      PRIMARY KEY (task_id, comparison_index),
+      FOREIGN KEY(task_id) REFERENCES tasks(task_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_images_task_id ON images(task_id);
     CREATE INDEX IF NOT EXISTS idx_issues_task_id ON issues(task_id);
+    CREATE INDEX IF NOT EXISTS idx_regions_task_id ON comparison_regions(task_id);
   `);
 
   ensureColumnExists("images", "comparison_index", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumnExists("images", "width", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumnExists("images", "height", "INTEGER NOT NULL DEFAULT 0");
   ensureColumnExists("issues", "comparison_index", "INTEGER NOT NULL DEFAULT 0");
   db.exec("CREATE INDEX IF NOT EXISTS idx_images_task_comparison ON images(task_id, comparison_index);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_issues_task_comparison ON issues(task_id, comparison_index);");

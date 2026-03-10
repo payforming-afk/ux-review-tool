@@ -27,6 +27,8 @@ export interface ImageRecord {
   task_id: number;
   comparison_index: number;
   type: ImageType;
+  width: number;
+  height: number;
   url: string;
 }
 

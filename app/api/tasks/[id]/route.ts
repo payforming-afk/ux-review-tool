@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTaskReviewData } from "@/lib/repository";
-import { loadComparisonRegions } from "@/lib/storage";
+import { getTaskReviewData, loadComparisonRegions } from "@/lib/repository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +25,7 @@ export async function GET(
     (a, b) => a - b
   );
 
-  const regionsByComparison = await loadComparisonRegions(taskId, comparisonIndexes);
+  const regionsByComparison = loadComparisonRegions(taskId, comparisonIndexes);
 
   const comparisons = comparisonIndexes.map((comparisonIndex) => ({
     comparison_index: comparisonIndex,

@@ -19,7 +19,7 @@ export function generateDiff(
   designPngBuffer: Buffer,
   implementationPngBuffer: Buffer
 ): {
-  diffBuffer: Buffer;
+  diffBase64: string;
   regions: DiffRegion[];
   width: number;
   height: number;
@@ -63,8 +63,10 @@ export function generateDiff(
     pixel_count: region.pixel_count
   }));
 
+  const diffPng = PNG.sync.write(diff);
+
   return {
-    diffBuffer: PNG.sync.write(diff),
+    diffBase64: diffPng.toString("base64"),
     regions,
     width: design.width,
     height: design.height,

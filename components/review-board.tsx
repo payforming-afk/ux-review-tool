@@ -214,7 +214,11 @@ export function ReviewBoard({ task, comparisons, initialIssues }: ReviewBoardPro
                       aspectRatio: `${imageWidth} / ${imageHeight}`
                     }}
                   >
-                    <img src={imageByType.diff.url} alt="差异图" className="image-stage-media" />
+                    <img
+                      src={resolveImageSrc(imageByType.diff.url)}
+                      alt="差异图"
+                      className="image-stage-media"
+                    />
 
                     {regions.map((region) => (
                       <button
@@ -360,7 +364,7 @@ function ImageCard({
               aspectRatio: `${width} / ${height}`
             }}
           >
-            <img src={image.url} alt={title} className="image-stage-media" />
+            <img src={resolveImageSrc(image.url)} alt={title} className="image-stage-media" />
           </div>
         </div>
       )}
@@ -372,4 +376,12 @@ function buildFittedStageWidth(width: number, height: number): string {
   const safeWidth = width > 0 ? width : 1;
   const safeHeight = height > 0 ? height : 1;
   return `min(100%, calc(70vh * ${safeWidth} / ${safeHeight}))`;
+}
+
+function resolveImageSrc(value: string): string {
+  if (value.startsWith("data:") || value.startsWith("/") || value.startsWith("http")) {
+    return value;
+  }
+
+  return `data:image/png;base64,${value}`;
 }

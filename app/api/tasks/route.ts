@@ -3,11 +3,11 @@ import sharp from "sharp";
 import { generateDiff } from "@/lib/diff";
 import {
   createImage,
+  saveComparisonRegions,
   createTask,
   getTask,
   listTasks as listTasksFromRepo
 } from "@/lib/repository";
-import { saveRegions, taskAssetUrl, writeTaskAsset } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,9 +18,9 @@ interface PendingComparison {
   height: number;
   mismatch_pixels: number;
   detected_regions: number;
-  design_png: Buffer;
-  implementation_png: Buffer;
-  diff_png: Buffer;
+  design_image: string;
+  implementation_image: string;
+  diff_image_base64: string;
   regions: ReturnType<typeof generateDiff>["regions"];
 }
 
@@ -96,9 +96,9 @@ export async function POST(request: Request): Promise<NextResponse> {
         height: diff.height,
         mismatch_pixels: diff.mismatch_pixels,
         detected_regions: diff.regions.length,
-        design_png: designPngBuffer,
-        implementation_png: implementationPngBuffer,
-        diff_png: diff.diffBuffer,
+        design_image: toPngDataUrl(designPngBuffer),
+        implementation_image: toPngDataUrl(implementationPngBuffer),
+        diff_image_base64: diff.diffBase64,
         regions: diff.regions
       });
     }
@@ -110,35 +110,31 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
 
     for (const comparison of pendingComparisons) {
-      const suffix = String(comparison.comparison_index + 1).padStart(2, "0");
-      const designFileName = `design-${suffix}.png`;
-      const implementationFileName = `implementation-${suffix}.png`;
-      const diffFileName = `diff-${suffix}.png`;
-
-      await Promise.all([
-        writeTaskAsset(taskId, designFileName, comparison.design_png),
-        writeTaskAsset(taskId, implementationFileName, comparison.implementation_png),
-        writeTaskAsset(taskId, diffFileName, comparison.diff_png),
-        saveRegions(taskId, comparison.comparison_index, comparison.regions)
-      ]);
+      saveComparisonRegions(taskId, comparison.comparison_index, comparison.regions);
 
       createImage({
         task_id: taskId,
         comparison_index: comparison.comparison_index,
         type: "design",
-        url: taskAssetUrl(taskId, designFileName)
+        width: comparison.width,
+        height: comparison.height,
+        url: comparison.design_image
       });
       createImage({
         task_id: taskId,
         comparison_index: comparison.comparison_index,
         type: "implementation",
-        url: taskAssetUrl(taskId, implementationFileName)
+        width: comparison.width,
+        height: comparison.height,
+        url: comparison.implementation_image
       });
       createImage({
         task_id: taskId,
         comparison_index: comparison.comparison_index,
         type: "diff",
-        url: taskAssetUrl(taskId, diffFileName)
+        width: comparison.width,
+        height: comparison.height,
+        url: `data:image/png;base64,${comparison.diff_image_base64}`
       });
     }
 
@@ -147,6 +143,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         task: getTask(taskId),
         comparisons: pendingComparisons.map((comparison) => ({
           comparison_index: comparison.comparison_index,
+          designImage: comparison.design_image,
+          implementationImage: comparison.implementation_image,
+          diffImageBase64: comparison.diff_image_base64,
+          regions: comparison.regions,
           width: comparison.width,
           height: comparison.height,
           mismatch_pixels: comparison.mismatch_pixels,
@@ -216,4 +216,8 @@ function buildPairs(
 
 function getText(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function toPngDataUrl(buffer: Buffer): string {
+  return `data:image/png;base64,${buffer.toString("base64")}`;
 }

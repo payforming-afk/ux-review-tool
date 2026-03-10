@@ -1,9 +1,7 @@
-import { notFound } from "next/navigation";
-import path from "node:path";
-import sharp from "sharp";
+import Link from "next/link";
 import { ReviewBoard } from "@/components/review-board";
 import { getTaskReviewData } from "@/lib/repository";
-import { loadComparisonRegions } from "@/lib/storage";
+import { loadComparisonRegions } from "@/lib/repository";
 import type { ComparisonReview, ImageRecord } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -17,20 +15,30 @@ export default async function TaskReviewPage({ params }: TaskReviewPageProps) {
   const taskId = Number(id);
 
   if (!Number.isInteger(taskId) || taskId <= 0) {
-    notFound();
+    return (
+      <UnavailableState
+        title="任务编号无效"
+        description="当前链接中的任务编号不合法，请返回任务列表后重新进入。"
+      />
+    );
   }
 
   const data = getTaskReviewData(taskId);
 
   if (!data) {
-    notFound();
+    return (
+      <UnavailableState
+        title="任务结果暂不可用"
+        description="当前运行环境没有找到该任务数据，请返回任务列表后重试，或重新创建任务。"
+      />
+    );
   }
 
   const comparisonIndexes = Array.from(new Set(data.images.map((image) => image.comparison_index))).sort(
     (a, b) => a - b
   );
 
-  const regionsByComparison = await loadComparisonRegions(taskId, comparisonIndexes);
+  const regionsByComparison = loadComparisonRegions(taskId, comparisonIndexes);
 
   const comparisons: ComparisonReview[] = await Promise.all(
     comparisonIndexes.map(async (comparisonIndex) => {
@@ -68,26 +76,28 @@ export default async function TaskReviewPage({ params }: TaskReviewPageProps) {
 async function getComparisonDimensions(
   images: ImageRecord[]
 ): Promise<{ width: number; height: number }> {
-  const preferred =
-    images.find((image) => image.type === "diff") ??
-    images.find((image) => image.type === "design") ??
-    images.find((image) => image.type === "implementation") ??
-    null;
+  const persisted = images.find((image) => image.width > 0 && image.height > 0) ?? null;
+  return {
+    width: persisted?.width ?? 1,
+    height: persisted?.height ?? 1
+  };
+}
 
-  if (!preferred) {
-    return { width: 1, height: 1 };
-  }
-
-  const relative = preferred.url.startsWith("/") ? preferred.url.slice(1) : preferred.url;
-  const absolutePath = path.join(process.cwd(), "public", relative);
-
-  try {
-    const metadata = await sharp(absolutePath).metadata();
-    return {
-      width: metadata.width ?? 1,
-      height: metadata.height ?? 1
-    };
-  } catch {
-    return { width: 1, height: 1 };
-  }
+function UnavailableState({ title, description }: { title: string; description: string }) {
+  return (
+    <section className="stack-lg">
+      <article className="form-card stack-md">
+        <h2 className="section-title">{title}</h2>
+        <p className="section-subtitle">{description}</p>
+        <div className="actions">
+          <Link href="/tasks" className="button-link">
+            返回任务列表
+          </Link>
+          <Link href="/create" className="button-link button-link-primary">
+            新建任务
+          </Link>
+        </div>
+      </article>
+    </section>
+  );
 }

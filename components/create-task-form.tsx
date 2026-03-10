@@ -76,11 +76,16 @@ export function CreateTaskForm() {
         throw new Error(payload.error ?? "创建任务失败。");
       }
 
-      await response.json().catch(() => ({}));
+      const payload = (await response.json().catch(() => ({}))) as {
+        task?: { task_id?: number };
+      };
       form.reset();
       setDesignFiles([]);
       setImplementationFiles([]);
-      router.push("/tasks");
+      const createdTaskId = payload.task?.task_id;
+      router.push(
+        typeof createdTaskId === "number" && createdTaskId > 0 ? `/tasks/${createdTaskId}` : "/tasks"
+      );
       router.refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "创建任务失败，请稍后重试。");
